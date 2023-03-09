@@ -38,21 +38,20 @@ def _init_lazy_if_proper(results, lazy):
         lazy (bool): Determine whether to apply lazy operation. Default: False.
     """
 
-    if 'img_shape' not in results:
-        results['img_shape'] = results['imgs'][0].shape[:2]
+    if "img_shape" not in results:
+        results["img_shape"] = results["imgs"][0].shape[:2]
     if lazy:
-        if 'lazy' not in results:
-            img_h, img_w = results['img_shape']
+        if "lazy" not in results:
+            img_h, img_w = results["img_shape"]
             lazyop = dict()
-            lazyop['original_shape'] = results['img_shape']
-            lazyop['crop_bbox'] = np.array([0, 0, img_w, img_h],
-                                           dtype=np.float32)
-            lazyop['flip'] = False
-            lazyop['flip_direction'] = None
-            lazyop['interpolation'] = None
-            results['lazy'] = lazyop
+            lazyop["original_shape"] = results["img_shape"]
+            lazyop["crop_bbox"] = np.array([0, 0, img_w, img_h], dtype=np.float32)
+            lazyop["flip"] = False
+            lazyop["flip_direction"] = None
+            lazyop["interpolation"] = None
+            results["lazy"] = lazyop
     else:
-        assert 'lazy' not in results, 'Use Fuse after lazy operations'
+        assert "lazy" not in results, "Use Fuse after lazy operations"
 
 
 @PIPELINES.register_module()
@@ -68,19 +67,18 @@ class TorchvisionTrans:
             import torchvision
             import torchvision.transforms as tv_trans
         except ImportError:
-            raise RuntimeError('Install torchvision to use TorchvisionTrans')
-        if digit_version(torchvision.__version__) < digit_version('0.8.0'):
-            raise RuntimeError('The version of torchvision should be at least '
-                               '0.8.0')
+            raise RuntimeError("Install torchvision to use TorchvisionTrans")
+        if digit_version(torchvision.__version__) < digit_version("0.8.0"):
+            raise RuntimeError("The version of torchvision should be at least " "0.8.0")
 
         trans = getattr(tv_trans, type, None)
-        assert trans, f'Transform {type} not in torchvision'
+        assert trans, f"Transform {type} not in torchvision"
         self.trans = trans(**kwargs)
 
     def __call__(self, results):
-        assert 'imgs' in results
+        assert "imgs" in results
 
-        imgs = [x.transpose(2, 0, 1) for x in results['imgs']]
+        imgs = [x.transpose(2, 0, 1) for x in results["imgs"]]
         imgs = to_tensor(np.stack(imgs))
 
         imgs = self.trans(imgs).data.numpy()
@@ -88,7 +86,7 @@ class TorchvisionTrans:
         imgs[imgs < 0] = 0
         imgs = imgs.astype(np.uint8)
         imgs = [x.transpose(1, 2, 0) for x in imgs]
-        results['imgs'] = imgs
+        results["imgs"] = imgs
         return results
 
 
@@ -105,44 +103,53 @@ class PytorchVideoTrans:
             import pytorchvideo.transforms as ptv_trans
             import torch
         except ImportError:
-            raise RuntimeError('Install pytorchvideo to use PytorchVideoTrans')
-        if digit_version(torch.__version__) < digit_version('1.8.0'):
-            raise RuntimeError(
-                'The version of PyTorch should be at least 1.8.0')
+            raise RuntimeError("Install pytorchvideo to use PytorchVideoTrans")
+        if digit_version(torch.__version__) < digit_version("1.8.0"):
+            raise RuntimeError("The version of PyTorch should be at least 1.8.0")
 
         trans = getattr(ptv_trans, type, None)
-        assert trans, f'Transform {type} not in pytorchvideo'
+        assert trans, f"Transform {type} not in pytorchvideo"
 
-        supported_pytorchvideo_trans = ('AugMix', 'RandAugment',
-                                        'RandomResizedCrop', 'ShortSideScale',
-                                        'RandomShortSideScale')
-        assert type in supported_pytorchvideo_trans,\
-            f'PytorchVideo Transform {type} is not supported in MMAction2'
+        supported_pytorchvideo_trans = (
+            "AugMix",
+            "RandAugment",
+            "RandomResizedCrop",
+            "ShortSideScale",
+            "RandomShortSideScale",
+        )
+        assert (
+            type in supported_pytorchvideo_trans
+        ), f"PytorchVideo Transform {type} is not supported in MMAction2"
 
         self.trans = trans(**kwargs)
         self.type = type
 
     def __call__(self, results):
-        assert 'imgs' in results
+        assert "imgs" in results
 
-        assert 'gt_bboxes' not in results,\
-            f'PytorchVideo {self.type} doesn\'t support bboxes yet.'
-        assert 'proposals' not in results,\
-            f'PytorchVideo {self.type} doesn\'t support bboxes yet.'
+        assert (
+            "gt_bboxes" not in results
+        ), f"PytorchVideo {self.type} doesn't support bboxes yet."
+        assert (
+            "proposals" not in results
+        ), f"PytorchVideo {self.type} doesn't support bboxes yet."
 
-        if self.type in ('AugMix', 'RandAugment'):
+        if self.type in ("AugMix", "RandAugment"):
             # list[ndarray(h, w, 3)] -> torch.tensor(t, c, h, w)
-            imgs = [x.transpose(2, 0, 1) for x in results['imgs']]
+            imgs = [x.transpose(2, 0, 1) for x in results["imgs"]]
             imgs = to_tensor(np.stack(imgs))
         else:
             # list[ndarray(h, w, 3)] -> torch.tensor(c, t, h, w)
             # uint8 -> float32
-            imgs = to_tensor((np.stack(results['imgs']).transpose(3, 0, 1, 2) /
-                              255.).astype(np.float32))
+            imgs = to_tensor(
+                (np.stack(results["imgs"]).transpose(3, 0, 1, 2) / 255.0).astype(
+                    np.float32
+                )
+            )
 
         imgs = self.trans(imgs).data.numpy()
 
-        if self.type in ('AugMix', 'RandAugment'):
+        if self.type in ("AugMix", "RandAugment"):
             imgs[imgs > 255] = 255
             imgs[imgs < 0] = 0
             imgs = imgs.astype(np.uint8)
@@ -159,7 +166,7 @@ class PytorchVideoTrans:
             # torch.tensor(c, t, h, w) -> list[ndarray(h, w, 3)]
             imgs = [x for x in imgs.transpose(1, 2, 3, 0)]
 
-        results['imgs'] = imgs
+        results["imgs"] = imgs
 
         return results
 
@@ -191,12 +198,7 @@ class PoseCompact:
         type: Description of returned object.
     """
 
-    def __init__(self,
-                 padding=0.25,
-                 threshold=10,
-                 hw_ratio=None,
-                 allow_imgpad=True):
-
+    def __init__(self, padding=0.25, threshold=10, hw_ratio=None, allow_imgpad=True):
         self.padding = padding
         self.threshold = threshold
         if hw_ratio is not None:
@@ -208,12 +210,12 @@ class PoseCompact:
         assert self.padding >= 0
 
     def __call__(self, results):
-        img_shape = results['img_shape']
+        img_shape = results["img_shape"]
         h, w = img_shape
-        kp = results['keypoint']
+        kp = results["keypoint"]
 
         # Make NaN zero
-        kp[np.isnan(kp)] = 0.
+        kp[np.isnan(kp)] = 0.0
         kp_x = kp[..., 0]
         kp_y = kp[..., 1]
 
@@ -249,21 +251,27 @@ class PoseCompact:
         kp_y[kp_y != 0] -= min_y
 
         new_shape = (max_y - min_y, max_x - min_x)
-        results['img_shape'] = new_shape
+        results["img_shape"] = new_shape
 
         # the order is x, y, w, h (in [0, 1]), a tuple
-        crop_quadruple = results.get('crop_quadruple', (0., 0., 1., 1.))
-        new_crop_quadruple = (min_x / w, min_y / h, (max_x - min_x) / w,
-                              (max_y - min_y) / h)
+        crop_quadruple = results.get("crop_quadruple", (0.0, 0.0, 1.0, 1.0))
+        new_crop_quadruple = (
+            min_x / w,
+            min_y / h,
+            (max_x - min_x) / w,
+            (max_y - min_y) / h,
+        )
         crop_quadruple = _combine_quadruple(crop_quadruple, new_crop_quadruple)
-        results['crop_quadruple'] = crop_quadruple
+        results["crop_quadruple"] = crop_quadruple
         return results
 
     def __repr__(self):
-        repr_str = (f'{self.__class__.__name__}(padding={self.padding}, '
-                    f'threshold={self.threshold}, '
-                    f'hw_ratio={self.hw_ratio}, '
-                    f'allow_imgpad={self.allow_imgpad})')
+        repr_str = (
+            f"{self.__class__.__name__}(padding={self.padding}, "
+            f"threshold={self.threshold}, "
+            f"hw_ratio={self.hw_ratio}, "
+            f"allow_imgpad={self.allow_imgpad})"
+        )
         return repr_str
 
 
@@ -343,7 +351,7 @@ class Imgaug:
     def __init__(self, transforms):
         import imgaug.augmenters as iaa
 
-        if transforms == 'default':
+        if transforms == "default":
             self.transforms = self.default_transforms()
         elif isinstance(transforms, list):
             assert all(isinstance(trans, dict) for trans in transforms)
@@ -351,12 +359,13 @@ class Imgaug:
         elif isinstance(transforms, iaa.Augmenter):
             self.aug = self.transforms = transforms
         else:
-            raise ValueError('transforms must be `default` or a list of dicts'
-                             ' or iaa.Augmenter object')
+            raise ValueError(
+                "transforms must be `default` or a list of dicts"
+                " or iaa.Augmenter object"
+            )
 
         if not isinstance(transforms, iaa.Augmenter):
-            self.aug = iaa.Sequential(
-                [self.imgaug_builder(t) for t in self.transforms])
+            self.aug = iaa.Sequential([self.imgaug_builder(t) for t in self.transforms])
 
     @staticmethod
     def default_transforms():
@@ -380,40 +389,41 @@ class Imgaug:
 
         return [
             dict(
-                type='SomeOf',
+                type="SomeOf",
                 n=num_augmenters,
                 children=[
                     dict(
-                        type='ShearX',
-                        shear=17.19 * cur_level * random.choice([-1, 1])),
+                        type="ShearX", shear=17.19 * cur_level * random.choice([-1, 1])
+                    ),
                     dict(
-                        type='ShearY',
-                        shear=17.19 * cur_level * random.choice([-1, 1])),
+                        type="ShearY", shear=17.19 * cur_level * random.choice([-1, 1])
+                    ),
                     dict(
-                        type='TranslateX',
-                        percent=.2 * cur_level * random.choice([-1, 1])),
+                        type="TranslateX",
+                        percent=0.2 * cur_level * random.choice([-1, 1]),
+                    ),
                     dict(
-                        type='TranslateY',
-                        percent=.2 * cur_level * random.choice([-1, 1])),
+                        type="TranslateY",
+                        percent=0.2 * cur_level * random.choice([-1, 1]),
+                    ),
+                    dict(type="Rotate", rotate=30 * cur_level * random.choice([-1, 1])),
+                    dict(type="Posterize", nb_bits=max(1, int(4 * cur_level))),
+                    dict(type="Solarize", threshold=256 * cur_level),
+                    dict(type="EnhanceColor", factor=1.8 * cur_level + 0.1),
+                    dict(type="EnhanceContrast", factor=1.8 * cur_level + 0.1),
+                    dict(type="EnhanceBrightness", factor=1.8 * cur_level + 0.1),
+                    dict(type="EnhanceSharpness", factor=1.8 * cur_level + 0.1),
+                    dict(type="Autocontrast", cutoff=0),
+                    dict(type="Equalize"),
+                    dict(type="Invert", p=1.0),
                     dict(
-                        type='Rotate',
-                        rotate=30 * cur_level * random.choice([-1, 1])),
-                    dict(type='Posterize', nb_bits=max(1, int(4 * cur_level))),
-                    dict(type='Solarize', threshold=256 * cur_level),
-                    dict(type='EnhanceColor', factor=1.8 * cur_level + .1),
-                    dict(type='EnhanceContrast', factor=1.8 * cur_level + .1),
-                    dict(
-                        type='EnhanceBrightness', factor=1.8 * cur_level + .1),
-                    dict(type='EnhanceSharpness', factor=1.8 * cur_level + .1),
-                    dict(type='Autocontrast', cutoff=0),
-                    dict(type='Equalize'),
-                    dict(type='Invert', p=1.),
-                    dict(
-                        type='Cutout',
+                        type="Cutout",
                         nb_iterations=1,
                         size=0.2 * cur_level,
-                        squared=True)
-                ])
+                        squared=True,
+                    ),
+                ],
+            )
         ]
 
     def imgaug_builder(self, cfg):
@@ -430,20 +440,24 @@ class Imgaug:
         """
         import imgaug.augmenters as iaa
 
-        assert isinstance(cfg, dict) and 'type' in cfg
+        assert isinstance(cfg, dict) and "type" in cfg
         args = cfg.copy()
 
-        obj_type = args.pop('type')
+        obj_type = args.pop("type")
         if mmcv.is_str(obj_type):
-            obj_cls = getattr(iaa, obj_type) if hasattr(iaa, obj_type) \
+            obj_cls = (
+                getattr(iaa, obj_type)
+                if hasattr(iaa, obj_type)
                 else getattr(iaa.pillike, obj_type)
+            )
         elif issubclass(obj_type, iaa.Augmenter):
             obj_cls = obj_type
         else:
             raise TypeError(
-                f'type must be a str or valid type, but got {type(obj_type)}')
+                f"type must be a str or valid type, but got {type(obj_type)}"
+            )
 
-        for aug_list_key in ['children', 'then_list', 'else_list']:
+        for aug_list_key in ["children", "then_list", "else_list"]:
             if aug_list_key in args:
                 args[aug_list_key] = [
                     self.imgaug_builder(child) for child in args[aug_list_key]
@@ -452,58 +466,60 @@ class Imgaug:
         return obj_cls(**args)
 
     def __repr__(self):
-        repr_str = self.__class__.__name__ + f'(transforms={self.aug})'
+        repr_str = self.__class__.__name__ + f"(transforms={self.aug})"
         return repr_str
 
     def __call__(self, results):
-        assert results['modality'] == 'RGB', 'Imgaug only support RGB images.'
-        in_type = results['imgs'][0].dtype.type
+        assert results["modality"] == "RGB", "Imgaug only support RGB images."
+        in_type = results["imgs"][0].dtype.type
 
         cur_aug = self.aug.to_deterministic()
 
-        results['imgs'] = [
-            cur_aug.augment_image(frame) for frame in results['imgs']
-        ]
-        img_h, img_w, _ = results['imgs'][0].shape
+        results["imgs"] = [cur_aug.augment_image(frame) for frame in results["imgs"]]
+        img_h, img_w, _ = results["imgs"][0].shape
 
-        out_type = results['imgs'][0].dtype.type
-        assert in_type == out_type, \
-            ('Imgaug input dtype and output dtype are not the same. ',
-             f'Convert from {in_type} to {out_type}')
+        out_type = results["imgs"][0].dtype.type
+        assert in_type == out_type, (
+            "Imgaug input dtype and output dtype are not the same. ",
+            f"Convert from {in_type} to {out_type}",
+        )
 
-        if 'gt_bboxes' in results:
+        if "gt_bboxes" in results:
             from imgaug.augmentables import bbs
+
             bbox_list = [
-                bbs.BoundingBox(
-                    x1=bbox[0], y1=bbox[1], x2=bbox[2], y2=bbox[3])
-                for bbox in results['gt_bboxes']
+                bbs.BoundingBox(x1=bbox[0], y1=bbox[1], x2=bbox[2], y2=bbox[3])
+                for bbox in results["gt_bboxes"]
             ]
-            bboxes = bbs.BoundingBoxesOnImage(
-                bbox_list, shape=results['img_shape'])
+            bboxes = bbs.BoundingBoxesOnImage(bbox_list, shape=results["img_shape"])
             bbox_aug, *_ = cur_aug.augment_bounding_boxes([bboxes])
-            results['gt_bboxes'] = [[
-                max(bbox.x1, 0),
-                max(bbox.y1, 0),
-                min(bbox.x2, img_w),
-                min(bbox.y2, img_h)
-            ] for bbox in bbox_aug.items]
-            if 'proposals' in results:
-                bbox_list = [
-                    bbs.BoundingBox(
-                        x1=bbox[0], y1=bbox[1], x2=bbox[2], y2=bbox[3])
-                    for bbox in results['proposals']
-                ]
-                bboxes = bbs.BoundingBoxesOnImage(
-                    bbox_list, shape=results['img_shape'])
-                bbox_aug, *_ = cur_aug.augment_bounding_boxes([bboxes])
-                results['proposals'] = [[
+            results["gt_bboxes"] = [
+                [
                     max(bbox.x1, 0),
                     max(bbox.y1, 0),
                     min(bbox.x2, img_w),
-                    min(bbox.y2, img_h)
-                ] for bbox in bbox_aug.items]
+                    min(bbox.y2, img_h),
+                ]
+                for bbox in bbox_aug.items
+            ]
+            if "proposals" in results:
+                bbox_list = [
+                    bbs.BoundingBox(x1=bbox[0], y1=bbox[1], x2=bbox[2], y2=bbox[3])
+                    for bbox in results["proposals"]
+                ]
+                bboxes = bbs.BoundingBoxesOnImage(bbox_list, shape=results["img_shape"])
+                bbox_aug, *_ = cur_aug.augment_bounding_boxes([bboxes])
+                results["proposals"] = [
+                    [
+                        max(bbox.x1, 0),
+                        max(bbox.y1, 0),
+                        min(bbox.x2, img_w),
+                        min(bbox.y2, img_h),
+                    ]
+                    for bbox in bbox_aug.items
+                ]
 
-        results['img_shape'] = (img_h, img_w)
+        results["img_shape"] = (img_h, img_w)
 
         return results
 
@@ -521,33 +537,33 @@ class Fuse:
     """
 
     def __call__(self, results):
-        if 'lazy' not in results:
-            raise ValueError('No lazy operation detected')
-        lazyop = results['lazy']
-        imgs = results['imgs']
+        if "lazy" not in results:
+            raise ValueError("No lazy operation detected")
+        lazyop = results["lazy"]
+        imgs = results["imgs"]
 
         # crop
-        left, top, right, bottom = lazyop['crop_bbox'].round().astype(int)
+        left, top, right, bottom = lazyop["crop_bbox"].round().astype(int)
         imgs = [img[top:bottom, left:right] for img in imgs]
 
         # resize
-        img_h, img_w = results['img_shape']
-        if lazyop['interpolation'] is None:
-            interpolation = 'bilinear'
+        img_h, img_w = results["img_shape"]
+        if lazyop["interpolation"] is None:
+            interpolation = "bilinear"
         else:
-            interpolation = lazyop['interpolation']
+            interpolation = lazyop["interpolation"]
         imgs = [
             mmcv.imresize(img, (img_w, img_h), interpolation=interpolation)
             for img in imgs
         ]
 
         # flip
-        if lazyop['flip']:
+        if lazyop["flip"]:
             for img in imgs:
-                mmcv.imflip_(img, lazyop['flip_direction'])
+                mmcv.imflip_(img, lazyop["flip_direction"])
 
-        results['imgs'] = imgs
-        del results['lazy']
+        results["imgs"] = imgs
+        del results["lazy"]
 
         return results
 
@@ -568,7 +584,7 @@ class RandomCrop:
 
     def __init__(self, size, lazy=False):
         if not isinstance(size, int):
-            raise TypeError(f'Size must be an int, but got {type(size)}')
+            raise TypeError(f"Size must be an int, but got {type(size)}")
         self.size = size
         self.lazy = lazy
 
@@ -606,11 +622,10 @@ class RandomCrop:
                 'gt_bboxes' and 'proposals' (optional).
             crop_bbox(np.ndarray): The bbox used to crop the original image.
         """
-        results['gt_bboxes'] = self._box_crop(results['gt_bboxes'], crop_bbox)
-        if 'proposals' in results and results['proposals'] is not None:
-            assert results['proposals'].shape[1] == 4
-            results['proposals'] = self._box_crop(results['proposals'],
-                                                  crop_bbox)
+        results["gt_bboxes"] = self._box_crop(results["gt_bboxes"], crop_bbox)
+        if "proposals" in results and results["proposals"] is not None:
+            assert results["proposals"].shape[1] == 4
+            results["proposals"] = self._box_crop(results["proposals"], crop_bbox)
         return results
 
     def __call__(self, results):
@@ -621,11 +636,12 @@ class RandomCrop:
                 to the next transform in pipeline.
         """
         _init_lazy_if_proper(results, self.lazy)
-        if 'keypoint' in results:
-            assert not self.lazy, ('Keypoint Augmentations are not compatible '
-                                   'with lazy == True')
+        if "keypoint" in results:
+            assert not self.lazy, (
+                "Keypoint Augmentations are not compatible " "with lazy == True"
+            )
 
-        img_h, img_w = results['img_shape']
+        img_h, img_w = results["img_shape"]
         assert self.size <= img_h and self.size <= img_w
 
         y_offset = 0
@@ -635,66 +651,67 @@ class RandomCrop:
         if img_w > self.size:
             x_offset = int(np.random.randint(0, img_w - self.size))
 
-        if 'crop_quadruple' not in results:
-            results['crop_quadruple'] = np.array(
-                [0, 0, 1, 1],  # x, y, w, h
-                dtype=np.float32)
+        if "crop_quadruple" not in results:
+            results["crop_quadruple"] = np.array(
+                [0, 0, 1, 1], dtype=np.float32  # x, y, w, h
+            )
 
         x_ratio, y_ratio = x_offset / img_w, y_offset / img_h
         w_ratio, h_ratio = self.size / img_w, self.size / img_h
 
-        old_crop_quadruple = results['crop_quadruple']
+        old_crop_quadruple = results["crop_quadruple"]
         old_x_ratio, old_y_ratio = old_crop_quadruple[0], old_crop_quadruple[1]
         old_w_ratio, old_h_ratio = old_crop_quadruple[2], old_crop_quadruple[3]
         new_crop_quadruple = [
             old_x_ratio + x_ratio * old_w_ratio,
-            old_y_ratio + y_ratio * old_h_ratio, w_ratio * old_w_ratio,
-            h_ratio * old_h_ratio
+            old_y_ratio + y_ratio * old_h_ratio,
+            w_ratio * old_w_ratio,
+            h_ratio * old_h_ratio,
         ]
-        results['crop_quadruple'] = np.array(
-            new_crop_quadruple, dtype=np.float32)
+        results["crop_quadruple"] = np.array(new_crop_quadruple, dtype=np.float32)
 
         new_h, new_w = self.size, self.size
 
-        crop_bbox = np.array(
-            [x_offset, y_offset, x_offset + new_w, y_offset + new_h])
-        results['crop_bbox'] = crop_bbox
+        crop_bbox = np.array([x_offset, y_offset, x_offset + new_w, y_offset + new_h])
+        results["crop_bbox"] = crop_bbox
 
-        results['img_shape'] = (new_h, new_w)
+        results["img_shape"] = (new_h, new_w)
 
         if not self.lazy:
-            if 'keypoint' in results:
-                results['keypoint'] = self._crop_kps(results['keypoint'],
-                                                     crop_bbox)
-            if 'imgs' in results:
-                results['imgs'] = self._crop_imgs(results['imgs'], crop_bbox)
+            if "keypoint" in results:
+                results["keypoint"] = self._crop_kps(results["keypoint"], crop_bbox)
+            if "imgs" in results:
+                results["imgs"] = self._crop_imgs(results["imgs"], crop_bbox)
         else:
-            lazyop = results['lazy']
-            if lazyop['flip']:
-                raise NotImplementedError('Put Flip at last for now')
+            lazyop = results["lazy"]
+            if lazyop["flip"]:
+                raise NotImplementedError("Put Flip at last for now")
 
             # record crop_bbox in lazyop dict to ensure only crop once in Fuse
-            lazy_left, lazy_top, lazy_right, lazy_bottom = lazyop['crop_bbox']
+            lazy_left, lazy_top, lazy_right, lazy_bottom = lazyop["crop_bbox"]
             left = x_offset * (lazy_right - lazy_left) / img_w
             right = (x_offset + new_w) * (lazy_right - lazy_left) / img_w
             top = y_offset * (lazy_bottom - lazy_top) / img_h
             bottom = (y_offset + new_h) * (lazy_bottom - lazy_top) / img_h
-            lazyop['crop_bbox'] = np.array([(lazy_left + left),
-                                            (lazy_top + top),
-                                            (lazy_left + right),
-                                            (lazy_top + bottom)],
-                                           dtype=np.float32)
+            lazyop["crop_bbox"] = np.array(
+                [
+                    (lazy_left + left),
+                    (lazy_top + top),
+                    (lazy_left + right),
+                    (lazy_top + bottom),
+                ],
+                dtype=np.float32,
+            )
 
         # Process entity boxes
-        if 'gt_bboxes' in results:
+        if "gt_bboxes" in results:
             assert not self.lazy
-            results = self._all_box_crop(results, results['crop_bbox'])
+            results = self._all_box_crop(results, results["crop_bbox"])
 
         return results
 
     def __repr__(self):
-        repr_str = (f'{self.__class__.__name__}(size={self.size}, '
-                    f'lazy={self.lazy})')
+        repr_str = f"{self.__class__.__name__}(size={self.size}, " f"lazy={self.lazy})"
         return repr_str
 
 
@@ -715,25 +732,24 @@ class RandomResizedCrop(RandomCrop):
         lazy (bool): Determine whether to apply lazy operation. Default: False.
     """
 
-    def __init__(self,
-                 area_range=(0.08, 1.0),
-                 aspect_ratio_range=(3 / 4, 4 / 3),
-                 lazy=False):
+    def __init__(
+        self, area_range=(0.08, 1.0), aspect_ratio_range=(3 / 4, 4 / 3), lazy=False
+    ):
         self.area_range = area_range
         self.aspect_ratio_range = aspect_ratio_range
         self.lazy = lazy
         if not mmcv.is_tuple_of(self.area_range, float):
-            raise TypeError(f'Area_range must be a tuple of float, '
-                            f'but got {type(area_range)}')
+            raise TypeError(
+                f"Area_range must be a tuple of float, " f"but got {type(area_range)}"
+            )
         if not mmcv.is_tuple_of(self.aspect_ratio_range, float):
-            raise TypeError(f'Aspect_ratio_range must be a tuple of float, '
-                            f'but got {type(aspect_ratio_range)}')
+            raise TypeError(
+                f"Aspect_ratio_range must be a tuple of float, "
+                f"but got {type(aspect_ratio_range)}"
+            )
 
     @staticmethod
-    def get_crop_bbox(img_shape,
-                      area_range,
-                      aspect_ratio_range,
-                      max_attempts=10):
+    def get_crop_bbox(img_shape, area_range, aspect_ratio_range, max_attempts=10):
         """Get a crop bbox given the area range and aspect ratio range.
 
         Args:
@@ -758,13 +774,15 @@ class RandomResizedCrop(RandomCrop):
 
         min_ar, max_ar = aspect_ratio_range
         aspect_ratios = np.exp(
-            np.random.uniform(
-                np.log(min_ar), np.log(max_ar), size=max_attempts))
+            np.random.uniform(np.log(min_ar), np.log(max_ar), size=max_attempts)
+        )
         target_areas = np.random.uniform(*area_range, size=max_attempts) * area
-        candidate_crop_w = np.round(np.sqrt(target_areas *
-                                            aspect_ratios)).astype(np.int32)
-        candidate_crop_h = np.round(np.sqrt(target_areas /
-                                            aspect_ratios)).astype(np.int32)
+        candidate_crop_w = np.round(np.sqrt(target_areas * aspect_ratios)).astype(
+            np.int32
+        )
+        candidate_crop_h = np.round(np.sqrt(target_areas / aspect_ratios)).astype(
+            np.int32
+        )
 
         for i in range(max_attempts):
             crop_w = candidate_crop_w[i]
@@ -788,73 +806,80 @@ class RandomResizedCrop(RandomCrop):
                 to the next transform in pipeline.
         """
         _init_lazy_if_proper(results, self.lazy)
-        if 'keypoint' in results:
-            assert not self.lazy, ('Keypoint Augmentations are not compatible '
-                                   'with lazy == True')
+        if "keypoint" in results:
+            assert not self.lazy, (
+                "Keypoint Augmentations are not compatible " "with lazy == True"
+            )
 
-        img_h, img_w = results['img_shape']
+        img_h, img_w = results["img_shape"]
 
         left, top, right, bottom = self.get_crop_bbox(
-            (img_h, img_w), self.area_range, self.aspect_ratio_range)
+            (img_h, img_w), self.area_range, self.aspect_ratio_range
+        )
         new_h, new_w = bottom - top, right - left
 
-        if 'crop_quadruple' not in results:
-            results['crop_quadruple'] = np.array(
-                [0, 0, 1, 1],  # x, y, w, h
-                dtype=np.float32)
+        if "crop_quadruple" not in results:
+            results["crop_quadruple"] = np.array(
+                [0, 0, 1, 1], dtype=np.float32  # x, y, w, h
+            )
 
         x_ratio, y_ratio = left / img_w, top / img_h
         w_ratio, h_ratio = new_w / img_w, new_h / img_h
 
-        old_crop_quadruple = results['crop_quadruple']
+        old_crop_quadruple = results["crop_quadruple"]
         old_x_ratio, old_y_ratio = old_crop_quadruple[0], old_crop_quadruple[1]
         old_w_ratio, old_h_ratio = old_crop_quadruple[2], old_crop_quadruple[3]
         new_crop_quadruple = [
             old_x_ratio + x_ratio * old_w_ratio,
-            old_y_ratio + y_ratio * old_h_ratio, w_ratio * old_w_ratio,
-            h_ratio * old_h_ratio
+            old_y_ratio + y_ratio * old_h_ratio,
+            w_ratio * old_w_ratio,
+            h_ratio * old_h_ratio,
         ]
-        results['crop_quadruple'] = np.array(
-            new_crop_quadruple, dtype=np.float32)
+        results["crop_quadruple"] = np.array(new_crop_quadruple, dtype=np.float32)
 
         crop_bbox = np.array([left, top, right, bottom])
-        results['crop_bbox'] = crop_bbox
-        results['img_shape'] = (new_h, new_w)
+        results["crop_bbox"] = crop_bbox
+        results["img_shape"] = (new_h, new_w)
 
         if not self.lazy:
-            if 'keypoint' in results:
-                results['keypoint'] = self._crop_kps(results['keypoint'],
-                                                     crop_bbox)
-            if 'imgs' in results:
-                results['imgs'] = self._crop_imgs(results['imgs'], crop_bbox)
+            if "keypoint" in results:
+                results["keypoint"] = self._crop_kps(results["keypoint"], crop_bbox)
+            if "imgs" in results:
+                results["imgs"] = self._crop_imgs(results["imgs"], crop_bbox)
         else:
-            lazyop = results['lazy']
-            if lazyop['flip']:
-                raise NotImplementedError('Put Flip at last for now')
+            lazyop = results["lazy"]
+            if lazyop["flip"]:
+                raise NotImplementedError("Put Flip at last for now")
 
             # record crop_bbox in lazyop dict to ensure only crop once in Fuse
-            lazy_left, lazy_top, lazy_right, lazy_bottom = lazyop['crop_bbox']
+            lazy_left, lazy_top, lazy_right, lazy_bottom = lazyop["crop_bbox"]
             left = left * (lazy_right - lazy_left) / img_w
             right = right * (lazy_right - lazy_left) / img_w
             top = top * (lazy_bottom - lazy_top) / img_h
             bottom = bottom * (lazy_bottom - lazy_top) / img_h
-            lazyop['crop_bbox'] = np.array([(lazy_left + left),
-                                            (lazy_top + top),
-                                            (lazy_left + right),
-                                            (lazy_top + bottom)],
-                                           dtype=np.float32)
+            lazyop["crop_bbox"] = np.array(
+                [
+                    (lazy_left + left),
+                    (lazy_top + top),
+                    (lazy_left + right),
+                    (lazy_top + bottom),
+                ],
+                dtype=np.float32,
+            )
 
-        if 'gt_bboxes' in results:
+        if "gt_bboxes" in results:
             assert not self.lazy
-            results = self._all_box_crop(results, results['crop_bbox'])
+            results = self._all_box_crop(results, results["crop_bbox"])
 
         return results
 
     def __repr__(self):
-        repr_str = (f'{self.__class__.__name__}('
-                    f'area_range={self.area_range}, '
-                    f'aspect_ratio_range={self.aspect_ratio_range}, '
-                    f'lazy={self.lazy})')
+        repr_str = (
+            f"{self.__class__.__name__}("
+            f"area_range={self.area_range}, "
+            f"aspect_ratio_range={self.aspect_ratio_range}, "
+            f"lazy={self.lazy})"
+        )
         return repr_str
 
 
@@ -890,24 +915,29 @@ class MultiScaleCrop(RandomCrop):
         lazy (bool): Determine whether to apply lazy operation. Default: False.
     """
 
-    def __init__(self,
-                 input_size,
-                 scales=(1, ),
-                 max_wh_scale_gap=1,
-                 random_crop=False,
-                 num_fixed_crops=5,
-                 lazy=False):
+    def __init__(
+        self,
+        input_size,
+        scales=(1,),
+        max_wh_scale_gap=1,
+        random_crop=False,
+        num_fixed_crops=5,
+        lazy=False,
+    ):
         self.input_size = _pair(input_size)
         if not mmcv.is_tuple_of(self.input_size, int):
-            raise TypeError(f'Input_size must be int or tuple of int, '
-                            f'but got {type(input_size)}')
+            raise TypeError(
+                f"Input_size must be int or tuple of int, "
+                f"but got {type(input_size)}"
+            )
 
         if not isinstance(scales, tuple):
-            raise TypeError(f'Scales must be tuple, but got {type(scales)}')
+            raise TypeError(f"Scales must be tuple, but got {type(scales)}")
 
         if num_fixed_crops not in [5, 13]:
-            raise ValueError(f'Num_fix_crops must be in {[5, 13]}, '
-                             f'but got {num_fixed_crops}')
+            raise ValueError(
+                f"Num_fix_crops must be in {[5, 13]}, " f"but got {num_fixed_crops}"
+            )
 
         self.scales = scales
         self.max_wh_scale_gap = max_wh_scale_gap
@@ -923,11 +953,12 @@ class MultiScaleCrop(RandomCrop):
                 to the next transform in pipeline.
         """
         _init_lazy_if_proper(results, self.lazy)
-        if 'keypoint' in results:
-            assert not self.lazy, ('Keypoint Augmentations are not compatible '
-                                   'with lazy == True')
+        if "keypoint" in results:
+            assert not self.lazy, (
+                "Keypoint Augmentations are not compatible " "with lazy == True"
+            )
 
-        img_h, img_w = results['img_shape']
+        img_h, img_w = results["img_shape"]
         base_size = min(img_h, img_w)
         crop_sizes = [int(base_size * s) for s in self.scales]
 
@@ -966,74 +997,78 @@ class MultiScaleCrop(RandomCrop):
                     (1 * w_step, 1 * h_step),  # upper left quarter
                     (3 * w_step, 1 * h_step),  # upper right quarter
                     (1 * w_step, 3 * h_step),  # lower left quarter
-                    (3 * w_step, 3 * h_step)  # lower right quarter
+                    (3 * w_step, 3 * h_step),  # lower right quarter
                 ]
                 candidate_offsets.extend(extra_candidate_offsets)
             x_offset, y_offset = random.choice(candidate_offsets)
 
         new_h, new_w = crop_h, crop_w
 
-        crop_bbox = np.array(
-            [x_offset, y_offset, x_offset + new_w, y_offset + new_h])
-        results['crop_bbox'] = crop_bbox
-        results['img_shape'] = (new_h, new_w)
-        results['scales'] = self.scales
+        crop_bbox = np.array([x_offset, y_offset, x_offset + new_w, y_offset + new_h])
+        results["crop_bbox"] = crop_bbox
+        results["img_shape"] = (new_h, new_w)
+        results["scales"] = self.scales
 
-        if 'crop_quadruple' not in results:
-            results['crop_quadruple'] = np.array(
-                [0, 0, 1, 1],  # x, y, w, h
-                dtype=np.float32)
+        if "crop_quadruple" not in results:
+            results["crop_quadruple"] = np.array(
+                [0, 0, 1, 1], dtype=np.float32  # x, y, w, h
+            )
 
         x_ratio, y_ratio = x_offset / img_w, y_offset / img_h
         w_ratio, h_ratio = new_w / img_w, new_h / img_h
 
-        old_crop_quadruple = results['crop_quadruple']
+        old_crop_quadruple = results["crop_quadruple"]
         old_x_ratio, old_y_ratio = old_crop_quadruple[0], old_crop_quadruple[1]
         old_w_ratio, old_h_ratio = old_crop_quadruple[2], old_crop_quadruple[3]
         new_crop_quadruple = [
             old_x_ratio + x_ratio * old_w_ratio,
-            old_y_ratio + y_ratio * old_h_ratio, w_ratio * old_w_ratio,
-            h_ratio * old_h_ratio
+            old_y_ratio + y_ratio * old_h_ratio,
+            w_ratio * old_w_ratio,
+            h_ratio * old_h_ratio,
         ]
-        results['crop_quadruple'] = np.array(
-            new_crop_quadruple, dtype=np.float32)
+        results["crop_quadruple"] = np.array(new_crop_quadruple, dtype=np.float32)
 
         if not self.lazy:
-            if 'keypoint' in results:
-                results['keypoint'] = self._crop_kps(results['keypoint'],
-                                                     crop_bbox)
-            if 'imgs' in results:
-                results['imgs'] = self._crop_imgs(results['imgs'], crop_bbox)
+            if "keypoint" in results:
+                results["keypoint"] = self._crop_kps(results["keypoint"], crop_bbox)
+            if "imgs" in results:
+                results["imgs"] = self._crop_imgs(results["imgs"], crop_bbox)
         else:
-            lazyop = results['lazy']
-            if lazyop['flip']:
-                raise NotImplementedError('Put Flip at last for now')
+            lazyop = results["lazy"]
+            if lazyop["flip"]:
+                raise NotImplementedError("Put Flip at last for now")
 
             # record crop_bbox in lazyop dict to ensure only crop once in Fuse
-            lazy_left, lazy_top, lazy_right, lazy_bottom = lazyop['crop_bbox']
+            lazy_left, lazy_top, lazy_right, lazy_bottom = lazyop["crop_bbox"]
             left = x_offset * (lazy_right - lazy_left) / img_w
             right = (x_offset + new_w) * (lazy_right - lazy_left) / img_w
             top = y_offset * (lazy_bottom - lazy_top) / img_h
             bottom = (y_offset + new_h) * (lazy_bottom - lazy_top) / img_h
-            lazyop['crop_bbox'] = np.array([(lazy_left + left),
-                                            (lazy_top + top),
-                                            (lazy_left + right),
-                                            (lazy_top + bottom)],
-                                           dtype=np.float32)
+            lazyop["crop_bbox"] = np.array(
+                [
+                    (lazy_left + left),
+                    (lazy_top + top),
+                    (lazy_left + right),
+                    (lazy_top + bottom),
+                ],
+                dtype=np.float32,
+            )
 
-        if 'gt_bboxes' in results:
+        if "gt_bboxes" in results:
             assert not self.lazy
-            results = self._all_box_crop(results, results['crop_bbox'])
+            results = self._all_box_crop(results, results["crop_bbox"])
 
         return results
 
     def __repr__(self):
-        repr_str = (f'{self.__class__.__name__}('
-                    f'input_size={self.input_size}, scales={self.scales}, '
-                    f'max_wh_scale_gap={self.max_wh_scale_gap}, '
-                    f'random_crop={self.random_crop}, '
-                    f'num_fixed_crops={self.num_fixed_crops}, '
-                    f'lazy={self.lazy})')
+        repr_str = (
+            f"{self.__class__.__name__}("
+            f"input_size={self.input_size}, scales={self.scales}, "
+            f"max_wh_scale_gap={self.max_wh_scale_gap}, "
+            f"random_crop={self.random_crop}, "
+            f"num_fixed_crops={self.num_fixed_crops}, "
+            f"lazy={self.lazy})"
+        )
         return repr_str
 
 
@@ -1061,14 +1096,10 @@ class Resize:
         lazy (bool): Determine whether to apply lazy operation. Default: False.
     """
 
-    def __init__(self,
-                 scale,
-                 keep_ratio=True,
-                 interpolation='bilinear',
-                 lazy=False):
+    def __init__(self, scale, keep_ratio=True, interpolation="bilinear", lazy=False):
         if isinstance(scale, float):
             if scale <= 0:
-                raise ValueError(f'Invalid scale {scale}, must be positive.')
+                raise ValueError(f"Invalid scale {scale}, must be positive.")
         elif isinstance(scale, tuple):
             max_long_edge = max(scale)
             max_short_edge = min(scale)
@@ -1077,7 +1108,8 @@ class Resize:
                 scale = (np.inf, max_long_edge)
         else:
             raise TypeError(
-                f'Scale must be float or tuple of int, but got {type(scale)}')
+                f"Scale must be float or tuple of int, but got {type(scale)}"
+            )
         self.scale = scale
         self.keep_ratio = keep_ratio
         self.interpolation = interpolation
@@ -1085,8 +1117,7 @@ class Resize:
 
     def _resize_imgs(self, imgs, new_w, new_h):
         return [
-            mmcv.imresize(
-                img, (new_w, new_h), interpolation=self.interpolation)
+            mmcv.imresize(img, (new_w, new_h), interpolation=self.interpolation)
             for img in imgs
         ]
 
@@ -1115,55 +1146,59 @@ class Resize:
         """
 
         _init_lazy_if_proper(results, self.lazy)
-        if 'keypoint' in results:
-            assert not self.lazy, ('Keypoint Augmentations are not compatible '
-                                   'with lazy == True')
+        if "keypoint" in results:
+            assert not self.lazy, (
+                "Keypoint Augmentations are not compatible " "with lazy == True"
+            )
 
-        if 'scale_factor' not in results:
-            results['scale_factor'] = np.array([1, 1], dtype=np.float32)
-        img_h, img_w = results['img_shape']
+        if "scale_factor" not in results:
+            results["scale_factor"] = np.array([1, 1], dtype=np.float32)
+        img_h, img_w = results["img_shape"]
 
         if self.keep_ratio:
             new_w, new_h = mmcv.rescale_size((img_w, img_h), self.scale)
         else:
             new_w, new_h = self.scale
 
-        self.scale_factor = np.array([new_w / img_w, new_h / img_h],
-                                     dtype=np.float32)
+        self.scale_factor = np.array([new_w / img_w, new_h / img_h], dtype=np.float32)
 
-        results['img_shape'] = (new_h, new_w)
-        results['keep_ratio'] = self.keep_ratio
-        results['scale_factor'] = results['scale_factor'] * self.scale_factor
+        results["img_shape"] = (new_h, new_w)
+        results["keep_ratio"] = self.keep_ratio
+        results["scale_factor"] = results["scale_factor"] * self.scale_factor
 
         if not self.lazy:
-            if 'imgs' in results:
-                results['imgs'] = self._resize_imgs(results['imgs'], new_w,
-                                                    new_h)
-            if 'keypoint' in results:
-                results['keypoint'] = self._resize_kps(results['keypoint'],
-                                                       self.scale_factor)
+            if "imgs" in results:
+                results["imgs"] = self._resize_imgs(results["imgs"], new_w, new_h)
+            if "keypoint" in results:
+                results["keypoint"] = self._resize_kps(
+                    results["keypoint"], self.scale_factor
+                )
         else:
-            lazyop = results['lazy']
-            if lazyop['flip']:
-                raise NotImplementedError('Put Flip at last for now')
-            lazyop['interpolation'] = self.interpolation
+            lazyop = results["lazy"]
+            if lazyop["flip"]:
+                raise NotImplementedError("Put Flip at last for now")
+            lazyop["interpolation"] = self.interpolation
 
-        if 'gt_bboxes' in results:
+        if "gt_bboxes" in results:
             assert not self.lazy
-            results['gt_bboxes'] = self._box_resize(results['gt_bboxes'],
-                                                    self.scale_factor)
-            if 'proposals' in results and results['proposals'] is not None:
-                assert results['proposals'].shape[1] == 4
-                results['proposals'] = self._box_resize(
-                    results['proposals'], self.scale_factor)
+            results["gt_bboxes"] = self._box_resize(
+                results["gt_bboxes"], self.scale_factor
+            )
+            if "proposals" in results and results["proposals"] is not None:
+                assert results["proposals"].shape[1] == 4
+                results["proposals"] = self._box_resize(
+                    results["proposals"], self.scale_factor
+                )
 
         return results
 
     def __repr__(self):
-        repr_str = (f'{self.__class__.__name__}('
-                    f'scale={self.scale}, keep_ratio={self.keep_ratio}, '
-                    f'interpolation={self.interpolation}, '
-                    f'lazy={self.lazy})')
+        repr_str = (
+            f"{self.__class__.__name__}("
+            f"scale={self.scale}, keep_ratio={self.keep_ratio}, "
+            f"interpolation={self.interpolation}, "
+            f"lazy={self.lazy})"
+        )
         return repr_str
 
 
@@ -1183,7 +1218,7 @@ class RandomRescale:
             "nearest" | "bilinear". Default: "bilinear".
     """
 
-    def __init__(self, scale_range, interpolation='bilinear'):
+    def __init__(self, scale_range, interpolation="bilinear"):
         self.scale_range = scale_range
         # make sure scale_range is legal, first make sure the type is OK
         assert mmcv.is_tuple_of(scale_range, int)
@@ -1201,22 +1236,25 @@ class RandomRescale:
             results (dict): The resulting dict to be modified and passed
                 to the next transform in pipeline.
         """
-        short_edge = np.random.randint(self.scale_range[0],
-                                       self.scale_range[1] + 1)
-        resize = Resize((-1, short_edge),
-                        keep_ratio=True,
-                        interpolation=self.interpolation,
-                        lazy=False)
+        short_edge = np.random.randint(self.scale_range[0], self.scale_range[1] + 1)
+        resize = Resize(
+            (-1, short_edge),
+            keep_ratio=True,
+            interpolation=self.interpolation,
+            lazy=False,
+        )
         results = resize(results)
 
-        results['short_edge'] = short_edge
+        results["short_edge"] = short_edge
         return results
 
     def __repr__(self):
         scale_range = self.scale_range
-        repr_str = (f'{self.__class__.__name__}('
-                    f'scale_range=({scale_range[0]}, {scale_range[1]}), '
-                    f'interpolation={self.interpolation})')
+        repr_str = (
+            f"{self.__class__.__name__}("
+            f"scale_range=({scale_range[0]}, {scale_range[1]}), "
+            f"interpolation={self.interpolation})"
+        )
         return repr_str
 
 
@@ -1246,18 +1284,23 @@ class Flip:
             keypoints. Default: None.
         lazy (bool): Determine whether to apply lazy operation. Default: False.
     """
-    _directions = ['horizontal', 'vertical']
 
-    def __init__(self,
-                 flip_ratio=0.5,
-                 direction='horizontal',
-                 flip_label_map=None,
-                 left_kp=None,
-                 right_kp=None,
-                 lazy=False):
+    _directions = ["horizontal", "vertical"]
+
+    def __init__(
+        self,
+        flip_ratio=0.5,
+        direction="horizontal",
+        flip_label_map=None,
+        left_kp=None,
+        right_kp=None,
+        lazy=False,
+    ):
         if direction not in self._directions:
-            raise ValueError(f'Direction {direction} is not supported. '
-                             f'Currently support ones are {self._directions}')
+            raise ValueError(
+                f"Direction {direction} is not supported. "
+                f"Currently support ones are {self._directions}"
+            )
         self.flip_ratio = flip_ratio
         self.direction = direction
         self.flip_label_map = flip_label_map
@@ -1268,7 +1311,7 @@ class Flip:
     def _flip_imgs(self, imgs, modality):
         _ = [mmcv.imflip_(img, self.direction) for img in imgs]
         lt = len(imgs)
-        if modality == 'Flow':
+        if modality == "Flow":
             # The 1st frame of each 2 frames is flow-x
             for i in range(0, lt, 2):
                 imgs[i] = mmcv.iminvert(imgs[i])
@@ -1308,62 +1351,63 @@ class Flip:
                 to the next transform in pipeline.
         """
         _init_lazy_if_proper(results, self.lazy)
-        if 'keypoint' in results:
-            assert not self.lazy, ('Keypoint Augmentations are not compatible '
-                                   'with lazy == True')
-            assert self.direction == 'horizontal', (
-                'Only horizontal flips are'
-                'supported for human keypoints')
+        if "keypoint" in results:
+            assert not self.lazy, (
+                "Keypoint Augmentations are not compatible " "with lazy == True"
+            )
+            assert self.direction == "horizontal", (
+                "Only horizontal flips are" "supported for human keypoints"
+            )
 
-        modality = results['modality']
-        if modality == 'Flow':
-            assert self.direction == 'horizontal'
+        modality = results["modality"]
+        if modality == "Flow":
+            assert self.direction == "horizontal"
 
         flip = np.random.rand() < self.flip_ratio
 
-        results['flip'] = flip
-        results['flip_direction'] = self.direction
-        img_width = results['img_shape'][1]
+        results["flip"] = flip
+        results["flip_direction"] = self.direction
+        img_width = results["img_shape"][1]
 
         if self.flip_label_map is not None and flip:
-            results['label'] = self.flip_label_map.get(results['label'],
-                                                       results['label'])
+            results["label"] = self.flip_label_map.get(
+                results["label"], results["label"]
+            )
 
         if not self.lazy:
             if flip:
-                if 'imgs' in results:
-                    results['imgs'] = self._flip_imgs(results['imgs'],
-                                                      modality)
-                if 'keypoint' in results:
-                    kp = results['keypoint']
-                    kpscore = results.get('keypoint_score', None)
+                if "imgs" in results:
+                    results["imgs"] = self._flip_imgs(results["imgs"], modality)
+                if "keypoint" in results:
+                    kp = results["keypoint"]
+                    kpscore = results.get("keypoint_score", None)
                     kp, kpscore = self._flip_kps(kp, kpscore, img_width)
-                    results['keypoint'] = kp
-                    if 'keypoint_score' in results:
-                        results['keypoint_score'] = kpscore
+                    results["keypoint"] = kp
+                    if "keypoint_score" in results:
+                        results["keypoint_score"] = kpscore
         else:
-            lazyop = results['lazy']
-            if lazyop['flip']:
-                raise NotImplementedError('Use one Flip please')
-            lazyop['flip'] = flip
-            lazyop['flip_direction'] = self.direction
+            lazyop = results["lazy"]
+            if lazyop["flip"]:
+                raise NotImplementedError("Use one Flip please")
+            lazyop["flip"] = flip
+            lazyop["flip_direction"] = self.direction
 
-        if 'gt_bboxes' in results and flip:
-            assert not self.lazy and self.direction == 'horizontal'
-            width = results['img_shape'][1]
-            results['gt_bboxes'] = self._box_flip(results['gt_bboxes'], width)
-            if 'proposals' in results and results['proposals'] is not None:
-                assert results['proposals'].shape[1] == 4
-                results['proposals'] = self._box_flip(results['proposals'],
-                                                      width)
+        if "gt_bboxes" in results and flip:
+            assert not self.lazy and self.direction == "horizontal"
+            width = results["img_shape"][1]
+            results["gt_bboxes"] = self._box_flip(results["gt_bboxes"], width)
+            if "proposals" in results and results["proposals"] is not None:
+                assert results["proposals"].shape[1] == 4
+                results["proposals"] = self._box_flip(results["proposals"], width)
 
         return results
 
     def __repr__(self):
         repr_str = (
-            f'{self.__class__.__name__}('
-            f'flip_ratio={self.flip_ratio}, direction={self.direction}, '
-            f'flip_label_map={self.flip_label_map}, lazy={self.lazy})')
+            f"{self.__class__.__name__}("
+            f"flip_ratio={self.flip_ratio}, direction={self.direction}, "
+            f"flip_label_map={self.flip_label_map}, lazy={self.lazy})"
+        )
         return repr_str
 
 
@@ -1387,12 +1431,13 @@ class Normalize:
     def __init__(self, mean, std, to_bgr=False, adjust_magnitude=False):
         if not isinstance(mean, Sequence):
             raise TypeError(
-                f'Mean must be list, tuple or np.ndarray, but got {type(mean)}'
+                f"Mean must be list, tuple or np.ndarray, but got {type(mean)}"
             )
 
         if not isinstance(std, Sequence):
             raise TypeError(
-                f'Std must be list, tuple or np.ndarray, but got {type(std)}')
+                f"Std must be list, tuple or np.ndarray, but got {type(std)}"
+            )
 
         self.mean = np.array(mean, dtype=np.float32)
         self.std = np.array(std, dtype=np.float32)
@@ -1400,56 +1445,60 @@ class Normalize:
         self.adjust_magnitude = adjust_magnitude
 
     def __call__(self, results):
-        modality = results['modality']
+        modality = results["modality"]
 
-        if modality == 'RGB':
-            n = len(results['imgs'])
-            h, w, c = results['imgs'][0].shape
+        if modality == "RGB":
+            n = len(results["imgs"])
+            h, w, c = results["imgs"][0].shape
             imgs = np.empty((n, h, w, c), dtype=np.float32)
-            for i, img in enumerate(results['imgs']):
+            for i, img in enumerate(results["imgs"]):
                 imgs[i] = img
 
             for img in imgs:
                 mmcv.imnormalize_(img, self.mean, self.std, self.to_bgr)
 
-            results['imgs'] = imgs
-            results['img_norm_cfg'] = dict(
-                mean=self.mean, std=self.std, to_bgr=self.to_bgr)
+            results["imgs"] = imgs
+            results["img_norm_cfg"] = dict(
+                mean=self.mean, std=self.std, to_bgr=self.to_bgr
+            )
             return results
-        if modality == 'Flow':
-            num_imgs = len(results['imgs'])
+        if modality == "Flow":
+            num_imgs = len(results["imgs"])
             assert num_imgs % 2 == 0
             assert self.mean.shape[0] == 2
             assert self.std.shape[0] == 2
             n = num_imgs // 2
-            h, w = results['imgs'][0].shape
+            h, w = results["imgs"][0].shape
             x_flow = np.empty((n, h, w), dtype=np.float32)
             y_flow = np.empty((n, h, w), dtype=np.float32)
             for i in range(n):
-                x_flow[i] = results['imgs'][2 * i]
-                y_flow[i] = results['imgs'][2 * i + 1]
+                x_flow[i] = results["imgs"][2 * i]
+                y_flow[i] = results["imgs"][2 * i + 1]
             x_flow = (x_flow - self.mean[0]) / self.std[0]
             y_flow = (y_flow - self.mean[1]) / self.std[1]
             if self.adjust_magnitude:
-                x_flow = x_flow * results['scale_factor'][0]
-                y_flow = y_flow * results['scale_factor'][1]
+                x_flow = x_flow * results["scale_factor"][0]
+                y_flow = y_flow * results["scale_factor"][1]
             imgs = np.stack([x_flow, y_flow], axis=-1)
-            results['imgs'] = imgs
+            results["imgs"] = imgs
             args = dict(
                 mean=self.mean,
                 std=self.std,
                 to_bgr=self.to_bgr,
-                adjust_magnitude=self.adjust_magnitude)
-            results['img_norm_cfg'] = args
+                adjust_magnitude=self.adjust_magnitude,
+            )
+            results["img_norm_cfg"] = args
             return results
         raise NotImplementedError
 
     def __repr__(self):
-        repr_str = (f'{self.__class__.__name__}('
-                    f'mean={self.mean}, '
-                    f'std={self.std}, '
-                    f'to_bgr={self.to_bgr}, '
-                    f'adjust_magnitude={self.adjust_magnitude})')
+        repr_str = (
+            f"{self.__class__.__name__}("
+            f"mean={self.mean}, "
+            f"std={self.std}, "
+            f"to_bgr={self.to_bgr}, "
+            f"adjust_magnitude={self.adjust_magnitude})"
+        )
         return repr_str
 
 
@@ -1512,16 +1561,14 @@ class ColorJitter:
         self.fn_idx = np.random.permutation(4)
 
     def __call__(self, results):
-        imgs = results['imgs']
+        imgs = results["imgs"]
         num_clips, clip_len = 1, len(imgs)
 
         new_imgs = []
         for i in range(num_clips):
-            b = np.random.uniform(
-                low=self.brightness[0], high=self.brightness[1])
+            b = np.random.uniform(low=self.brightness[0], high=self.brightness[1])
             c = np.random.uniform(low=self.contrast[0], high=self.contrast[1])
-            s = np.random.uniform(
-                low=self.saturation[0], high=self.saturation[1])
+            s = np.random.uniform(low=self.saturation[0], high=self.saturation[1])
             h = np.random.uniform(low=self.hue[0], high=self.hue[1])
             start, end = i * clip_len, (i + 1) * clip_len
 
@@ -1538,15 +1585,17 @@ class ColorJitter:
                         img = self.adjust_hue(img, h)
                 img = np.clip(img, 0, 255).astype(np.uint8)
                 new_imgs.append(img)
-        results['imgs'] = new_imgs
+        results["imgs"] = new_imgs
         return results
 
     def __repr__(self):
-        repr_str = (f'{self.__class__.__name__}('
-                    f'brightness={self.brightness}, '
-                    f'contrast={self.contrast}, '
-                    f'saturation={self.saturation}, '
-                    f'hue={self.hue})')
+        repr_str = (
+            f"{self.__class__.__name__}("
+            f"brightness={self.brightness}, "
+            f"contrast={self.contrast}, "
+            f"saturation={self.saturation}, "
+            f"hue={self.hue})"
+        )
         return repr_str
 
 
@@ -1568,8 +1617,9 @@ class CenterCrop(RandomCrop):
         self.crop_size = _pair(crop_size)
         self.lazy = lazy
         if not mmcv.is_tuple_of(self.crop_size, int):
-            raise TypeError(f'Crop_size must be int or tuple of int, '
-                            f'but got {type(crop_size)}')
+            raise TypeError(
+                f"Crop_size must be int or tuple of int, " f"but got {type(crop_size)}"
+            )
 
     def __call__(self, results):
         """Performs the CenterCrop augmentation.
@@ -1579,11 +1629,12 @@ class CenterCrop(RandomCrop):
                 to the next transform in pipeline.
         """
         _init_lazy_if_proper(results, self.lazy)
-        if 'keypoint' in results:
-            assert not self.lazy, ('Keypoint Augmentations are not compatible '
-                                   'with lazy == True')
+        if "keypoint" in results:
+            assert not self.lazy, (
+                "Keypoint Augmentations are not compatible " "with lazy == True"
+            )
 
-        img_h, img_w = results['img_shape']
+        img_h, img_w = results["img_shape"]
         crop_w, crop_h = self.crop_size
 
         left = (img_w - crop_w) // 2
@@ -1593,60 +1644,65 @@ class CenterCrop(RandomCrop):
         new_h, new_w = bottom - top, right - left
 
         crop_bbox = np.array([left, top, right, bottom])
-        results['crop_bbox'] = crop_bbox
-        results['img_shape'] = (new_h, new_w)
+        results["crop_bbox"] = crop_bbox
+        results["img_shape"] = (new_h, new_w)
 
-        if 'crop_quadruple' not in results:
-            results['crop_quadruple'] = np.array(
-                [0, 0, 1, 1],  # x, y, w, h
-                dtype=np.float32)
+        if "crop_quadruple" not in results:
+            results["crop_quadruple"] = np.array(
+                [0, 0, 1, 1], dtype=np.float32  # x, y, w, h
+            )
 
         x_ratio, y_ratio = left / img_w, top / img_h
         w_ratio, h_ratio = new_w / img_w, new_h / img_h
 
-        old_crop_quadruple = results['crop_quadruple']
+        old_crop_quadruple = results["crop_quadruple"]
         old_x_ratio, old_y_ratio = old_crop_quadruple[0], old_crop_quadruple[1]
         old_w_ratio, old_h_ratio = old_crop_quadruple[2], old_crop_quadruple[3]
         new_crop_quadruple = [
             old_x_ratio + x_ratio * old_w_ratio,
-            old_y_ratio + y_ratio * old_h_ratio, w_ratio * old_w_ratio,
-            h_ratio * old_h_ratio
+            old_y_ratio + y_ratio * old_h_ratio,
+            w_ratio * old_w_ratio,
+            h_ratio * old_h_ratio,
         ]
-        results['crop_quadruple'] = np.array(
-            new_crop_quadruple, dtype=np.float32)
+        results["crop_quadruple"] = np.array(new_crop_quadruple, dtype=np.float32)
 
         if not self.lazy:
-            if 'keypoint' in results:
-                results['keypoint'] = self._crop_kps(results['keypoint'],
-                                                     crop_bbox)
-            if 'imgs' in results:
-                results['imgs'] = self._crop_imgs(results['imgs'], crop_bbox)
+            if "keypoint" in results:
+                results["keypoint"] = self._crop_kps(results["keypoint"], crop_bbox)
+            if "imgs" in results:
+                results["imgs"] = self._crop_imgs(results["imgs"], crop_bbox)
         else:
-            lazyop = results['lazy']
-            if lazyop['flip']:
-                raise NotImplementedError('Put Flip at last for now')
+            lazyop = results["lazy"]
+            if lazyop["flip"]:
+                raise NotImplementedError("Put Flip at last for now")
 
             # record crop_bbox in lazyop dict to ensure only crop once in Fuse
-            lazy_left, lazy_top, lazy_right, lazy_bottom = lazyop['crop_bbox']
+            lazy_left, lazy_top, lazy_right, lazy_bottom = lazyop["crop_bbox"]
             left = left * (lazy_right - lazy_left) / img_w
             right = right * (lazy_right - lazy_left) / img_w
             top = top * (lazy_bottom - lazy_top) / img_h
             bottom = bottom * (lazy_bottom - lazy_top) / img_h
-            lazyop['crop_bbox'] = np.array([(lazy_left + left),
-                                            (lazy_top + top),
-                                            (lazy_left + right),
-                                            (lazy_top + bottom)],
-                                           dtype=np.float32)
+            lazyop["crop_bbox"] = np.array(
+                [
+                    (lazy_left + left),
+                    (lazy_top + top),
+                    (lazy_left + right),
+                    (lazy_top + bottom),
+                ],
+                dtype=np.float32,
+            )
 
-        if 'gt_bboxes' in results:
+        if "gt_bboxes" in results:
             assert not self.lazy
-            results = self._all_box_crop(results, results['crop_bbox'])
+            results = self._all_box_crop(results, results["crop_bbox"])
 
         return results
 
     def __repr__(self):
-        repr_str = (f'{self.__class__.__name__}(crop_size={self.crop_size}, '
-                    f'lazy={self.lazy})')
+        repr_str = (
+            f"{self.__class__.__name__}(crop_size={self.crop_size}, "
+            f"lazy={self.lazy})"
+        )
         return repr_str
 
 
@@ -1666,8 +1722,9 @@ class ThreeCrop:
     def __init__(self, crop_size):
         self.crop_size = _pair(crop_size)
         if not mmcv.is_tuple_of(self.crop_size, int):
-            raise TypeError(f'Crop_size must be int or tuple of int, '
-                            f'but got {type(crop_size)}')
+            raise TypeError(
+                f"Crop_size must be int or tuple of int, " f"but got {type(crop_size)}"
+            )
 
     def __call__(self, results):
         """Performs the ThreeCrop augmentation.
@@ -1677,11 +1734,11 @@ class ThreeCrop:
                 to the next transform in pipeline.
         """
         _init_lazy_if_proper(results, False)
-        if 'gt_bboxes' in results or 'proposals' in results:
-            warnings.warn('ThreeCrop cannot process bounding boxes')
+        if "gt_bboxes" in results or "proposals" in results:
+            warnings.warn("ThreeCrop cannot process bounding boxes")
 
-        imgs = results['imgs']
-        img_h, img_w = results['imgs'][0].shape[:2]
+        imgs = results["imgs"]
+        img_h, img_w = results["imgs"][0].shape[:2]
         crop_w, crop_h = self.crop_size
         assert crop_h == img_h or crop_w == img_w
 
@@ -1705,21 +1762,21 @@ class ThreeCrop:
         for x_offset, y_offset in offsets:
             bbox = [x_offset, y_offset, x_offset + crop_w, y_offset + crop_h]
             crop = [
-                img[y_offset:y_offset + crop_h, x_offset:x_offset + crop_w]
+                img[y_offset : y_offset + crop_h, x_offset : x_offset + crop_w]
                 for img in imgs
             ]
             cropped.extend(crop)
             crop_bboxes.extend([bbox for _ in range(len(imgs))])
 
         crop_bboxes = np.array(crop_bboxes)
-        results['imgs'] = cropped
-        results['crop_bbox'] = crop_bboxes
-        results['img_shape'] = results['imgs'][0].shape[:2]
+        results["imgs"] = cropped
+        results["crop_bbox"] = crop_bboxes
+        results["img_shape"] = results["imgs"][0].shape[:2]
 
         return results
 
     def __repr__(self):
-        repr_str = f'{self.__class__.__name__}(crop_size={self.crop_size})'
+        repr_str = f"{self.__class__.__name__}(crop_size={self.crop_size})"
         return repr_str
 
 
@@ -1739,8 +1796,9 @@ class TenCrop:
     def __init__(self, crop_size):
         self.crop_size = _pair(crop_size)
         if not mmcv.is_tuple_of(self.crop_size, int):
-            raise TypeError(f'Crop_size must be int or tuple of int, '
-                            f'but got {type(crop_size)}')
+            raise TypeError(
+                f"Crop_size must be int or tuple of int, " f"but got {type(crop_size)}"
+            )
 
     def __call__(self, results):
         """Performs the TenCrop augmentation.
@@ -1751,12 +1809,12 @@ class TenCrop:
         """
         _init_lazy_if_proper(results, False)
 
-        if 'gt_bboxes' in results or 'proposals' in results:
-            warnings.warn('TenCrop cannot process bounding boxes')
+        if "gt_bboxes" in results or "proposals" in results:
+            warnings.warn("TenCrop cannot process bounding boxes")
 
-        imgs = results['imgs']
+        imgs = results["imgs"]
 
-        img_h, img_w = results['imgs'][0].shape[:2]
+        img_h, img_w = results["imgs"][0].shape[:2]
         crop_w, crop_h = self.crop_size
 
         w_step = (img_w - crop_w) // 4
@@ -1774,7 +1832,7 @@ class TenCrop:
         crop_bboxes = list()
         for x_offset, y_offsets in offsets:
             crop = [
-                img[y_offsets:y_offsets + crop_h, x_offset:x_offset + crop_w]
+                img[y_offsets : y_offsets + crop_h, x_offset : x_offset + crop_w]
                 for img in imgs
             ]
             flip_crop = [np.flip(c, axis=1).copy() for c in crop]
@@ -1784,14 +1842,14 @@ class TenCrop:
             crop_bboxes.extend([bbox for _ in range(len(imgs) * 2)])
 
         crop_bboxes = np.array(crop_bboxes)
-        results['imgs'] = img_crops
-        results['crop_bbox'] = crop_bboxes
-        results['img_shape'] = results['imgs'][0].shape[:2]
+        results["imgs"] = img_crops
+        results["crop_bbox"] = crop_bboxes
+        results["img_shape"] = results["imgs"][0].shape[:2]
 
         return results
 
     def __repr__(self):
-        repr_str = f'{self.__class__.__name__}(crop_size={self.crop_size})'
+        repr_str = f"{self.__class__.__name__}(crop_size={self.crop_size})"
         return repr_str
 
 
@@ -1810,7 +1868,7 @@ class AudioAmplify:
         if isinstance(ratio, float):
             self.ratio = ratio
         else:
-            raise TypeError('Amplification ratio should be float.')
+            raise TypeError("Amplification ratio should be float.")
 
     def __call__(self, results):
         """Perform the audio amplification.
@@ -1820,14 +1878,14 @@ class AudioAmplify:
                 to the next transform in pipeline.
         """
 
-        assert 'audios' in results
-        results['audios'] *= self.ratio
-        results['amplify_ratio'] = self.ratio
+        assert "audios" in results
+        results["audios"] *= self.ratio
+        results["amplify_ratio"] = self.ratio
 
         return results
 
     def __repr__(self):
-        repr_str = f'{self.__class__.__name__}(ratio={self.ratio})'
+        repr_str = f"{self.__class__.__name__}(ratio={self.ratio})"
         return repr_str
 
 
@@ -1847,20 +1905,16 @@ class MelSpectrogram:
             collation by truncating or padding. Default: 128.
     """
 
-    def __init__(self,
-                 window_size=32,
-                 step_size=16,
-                 n_mels=80,
-                 fixed_length=128):
+    def __init__(self, window_size=32, step_size=16, n_mels=80, fixed_length=128):
         if all(
-                isinstance(x, int)
-                for x in [window_size, step_size, n_mels, fixed_length]):
+            isinstance(x, int) for x in [window_size, step_size, n_mels, fixed_length]
+        ):
             self.window_size = window_size
             self.step_size = step_size
             self.n_mels = n_mels
             self.fixed_length = fixed_length
         else:
-            raise TypeError('All arguments should be int.')
+            raise TypeError("All arguments should be int.")
 
     def __call__(self, results):
         """Perform MelSpectrogram transformation.
@@ -1872,35 +1926,38 @@ class MelSpectrogram:
         try:
             import librosa
         except ImportError:
-            raise ImportError('Install librosa first.')
-        signals = results['audios']
-        sample_rate = results['sample_rate']
+            raise ImportError("Install librosa first.")
+        signals = results["audios"]
+        sample_rate = results["sample_rate"]
         n_fft = int(round(sample_rate * self.window_size / 1000))
         hop_length = int(round(sample_rate * self.step_size / 1000))
         melspectrograms = list()
-        for clip_idx in range(results['num_clips']):
+        for clip_idx in range(results["num_clips"]):
             clip_signal = signals[clip_idx]
             mel = librosa.feature.melspectrogram(
                 y=clip_signal,
                 sr=sample_rate,
                 n_fft=n_fft,
                 hop_length=hop_length,
-                n_mels=self.n_mels)
+                n_mels=self.n_mels,
+            )
             if mel.shape[0] >= self.fixed_length:
-                mel = mel[:self.fixed_length, :]
+                mel = mel[: self.fixed_length, :]
             else:
                 mel = np.pad(
-                    mel, ((0, mel.shape[-1] - self.fixed_length), (0, 0)),
-                    mode='edge')
+                    mel, ((0, mel.shape[-1] - self.fixed_length), (0, 0)), mode="edge"
+                )
             melspectrograms.append(mel)
 
-        results['audios'] = np.array(melspectrograms)
+        results["audios"] = np.array(melspectrograms)
         return results
 
     def __repr__(self):
-        repr_str = (f'{self.__class__.__name__}'
-                    f'(window_size={self.window_size}), '
-                    f'step_size={self.step_size}, '
-                    f'n_mels={self.n_mels}, '
-                    f'fixed_length={self.fixed_length})')
+        repr_str = (
+            f"{self.__class__.__name__}"
+            f"(window_size={self.window_size}), "
+            f"step_size={self.step_size}, "
+            f"n_mels={self.n_mels}, "
+            f"fixed_length={self.fixed_length})"
+        )
         return repr_str
